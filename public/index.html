@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Start Screen Recording</title>
+</head>
+<body>
+    <h1>Auto Start Screen Recording</h1>
+    <button id="startMonitorButton">Start Monitoring Device</button>
+    <button id="stopMonitorButton" style="display: none;">Stop Monitoring Device</button>
+    <video id="screenVideo" autoplay style="display: none;"></video>
+
+    <script>
+        let mediaRecorder;
+        let chunks = [];
+        let socket;
+
+        document.getElementById('startMonitorButton').addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { cursor: "always" },
+                    audio: false
+                });
+
+                const video = document.getElementById('screenVideo');
+                video.srcObject = stream;
+                video.style.display = 'block';
+
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'video/webm; codecs=vp8'
+                });
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        chunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(chunks, { type: 'video/webm' });
+                    socket.send(blob);
+                    chunks = [];
+                };
+
+                socket = new WebSocket('ws://localhost:3000');
+                socket.onopen = () => {
+                    console.log('WebSocket connection opened');
+                    mediaRecorder.start();
+                };
+
+                socket.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                };
+
+                document.getElementById('startMonitorButton').style.display = 'none';
+                document.getElementById('stopMonitorButton').style.display = 'inline';
+
+                document.getElementById('stopMonitorButton').addEventListener('click', () => {
+                    mediaRecorder.stop();
+                    socket.close();
+                    video.style.display = 'none';
+                    document.getElementById('startMonitorButton').style.display = 'inline';
+                    document.getElementById('stopMonitorButton').style.display = 'none';
+                });
+
+                window.addEventListener('beforeunload', () => {
+                    mediaRecorder.stop();
+                    socket.close();
+                });
+
+            } catch (err) {
+                console.error("Error: " + err);
+            }
+        });
+    </script>
+</body>
+</html>
